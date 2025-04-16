@@ -1,6 +1,20 @@
 import json
 from datetime import datetime
 
+# fetch from https://api.surfbuoys.com/wavedata/stationId/{buoy_id}
+import requests
+
+
+def fetch_buoy_data(buoy_ids):
+    base_url = "https://api.surfbuoys.com/wavedata/stationId/"
+    data = {}
+    for buoy_id in buoy_ids:
+        url = f"{base_url}{buoy_id}"
+        resp = requests.get(url)
+        resp.raise_for_status()
+        data[buoy_id] = resp.json()
+    return data
+
 
 def transform_buoy_data(input_file, output_file, num_readings):
     # Predefined reference dictionaries

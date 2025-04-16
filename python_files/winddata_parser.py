@@ -1,6 +1,16 @@
 import json
 from datetime import datetime
 
+# fetch from https://api.surfbuoys.com/wavedata/stationId/KLIH1
+import requests
+
+
+def fetch_klih1_data():
+    url = "https://api.surfbuoys.com/wavedata/stationId/KLIH1"
+    resp = requests.get(url)
+    resp.raise_for_status()
+    return {"KLIH1": resp.json()}
+
 
 def transform_klih1_to_kahului(input_file, output_file, num_readings=6):
     """
