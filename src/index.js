@@ -35,21 +35,19 @@ async function main() {
     );
   });
 
-    // Run all fetch-and-parse operations in parallel:
+    // Run all fetch-and-parse operations in parallel:a 
     await Promise.all(
-    buoys.map(async (buoy) => {
+      buoys.map(async (buoy) => {
         try {
-        // fetchData() still returns a Promise, now kicked off in parallel
-        const rawData = await buoy.fetchData();
-
-        // parseData() is synchronous, but runs as soon as fetchData resolves
-        buoy.parseData(rawData, numReadings);
+          const rawData = await buoy.fetchData();
+          const result = buoy.parseData(rawData, numReadings, "readable");
+          console.log(`\n--- ${buoy.stationName} ---\n${result}`);
         } catch (error) {
-        console.error(`Error processing buoy ${buoy.stationId}:`, error);
+          console.error(`Error processing buoy ${buoy.stationId}:`, error);
         }
-    })
-    );
-
+      })
+      );
+   
 
   const transformedData = {};
   for (const buoy of buoys) {
@@ -58,9 +56,7 @@ async function main() {
 
   const llmPromptString = JSON.stringify(transformedData, null, 2);
 
-  // For demonstration, we’ll just print it to the console.
-  // In a real scenario, you could store it in a file or send it via an API.
-  console.log("Prompt for LLM:\n", llmPromptString);
+
 
   // Example for writing to a file (Node.js):
   /*

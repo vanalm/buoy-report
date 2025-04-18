@@ -46,7 +46,7 @@ export class Buoy {
     const url = `${API_BASE_URL}/${this.stationId}`;
 
     // Use fetch to get the data. In Node.js, fetch returns a promise.
-    const response = await fetch(url);
+    const response = await fetch(url, { cache: 'no-cache' });
 
     // If the response is not "ok" (status 200-299), we throw an error
     if (!response.ok) {
@@ -76,80 +76,179 @@ export class Buoy {
  *                         or an object like { data: [...] }, or { [stationId]: [...] }.
  * @param {number} numReadings  How many readings to keep.
  */
-  parseData(rawData, numReadings) {
-    let measurements;
+parseData(rawData, numReadings, outputFormat = "readable") {
+  let measurements;
 
-    // 1. Raw data is already an Array?
-    if (Array.isArray(rawData)) {
-      measurements = rawData;
+  // 1. Raw data is already an Array?
+  if (Array.isArray(rawData)) {
+    measurements = rawData;
 
-    // 2. Raw data is an object with a .data Array?
-    } else if (
-      rawData !== null &&
-      typeof rawData === "object" &&
-      Array.isArray(rawData.data)
-    ) {
-      measurements = rawData.data;
+  // 2. Raw data is an object with a .data Array?
+  } else if (
+    rawData !== null &&
+    typeof rawData === "object" &&
+    Array.isArray(rawData.data)
+  ) {
+    measurements = rawData.data;
 
-    // 3. Raw data is an object keyed by station ID?
-    } else if (
-      rawData !== null &&
-      typeof rawData === "object" &&
-      Array.isArray(rawData[this.stationId])
-    ) {
-      measurements = rawData[this.stationId];
+  // 3. Raw data is an object keyed by station ID?
+  } else if (
+    rawData !== null &&
+    typeof rawData === "object" &&
+    Array.isArray(rawData[this.stationId])
+  ) {
+    measurements = rawData[this.stationId];
 
-    } else {
-      // Nothing matched – throw a clear error so you know exactly what shape you got
-      throw new Error(
-        `parseData expected an Array, { data: Array }, or { ${this.stationId}: Array }, but got:\n` +
-        JSON.stringify(rawData).slice(0, 200) + "…"
-      );
+  } else {
+    // Nothing matched – throw a clear error so you know exactly what shape you got
+    throw new Error(
+      `parseData expected an Array, { data: Array }, or { ${this.stationId}: Array }, but got:\n` +
+      JSON.stringify(rawData).slice(0, 200) + "…"
+    );
+  }
+
+  // Sort ascending (oldest first)
+  measurements.sort((a, b) => new Date(a.GMT) - new Date(b.GMT));
+
+  // Take the *newest* numReadings by slicing from the end
+  const trimmed = measurements.slice(-numReadings);
+
+  // Build normalized timeSeries
+  this.timeSeries = trimmed.map((entry) => {
+    const {
+      GMT,
+      height,
+      period,
+      swellDir,
+      windSpeed,
+      windGust,
+      windDir,
+      airTemp,
+      waterTemp,
+    } = entry;
+
+    let timestampUTC;
+    try {
+      timestampUTC = new Date(GMT).toISOString();
+    } catch {
+      timestampUTC = GMT;
     }
 
-    // Now measurements is guaranteed to be an Array, so we can sort + slice + map:
+    let result = {
+      timestampUTC,
+    };
 
-    // Sort ascending by timestamp (newer first)
-    measurements.sort((a, b) => new Date(a.GMT) - new Date(b.GMT));
-
-    // Take only the first `numReadings`
-    const trimmed = measurements.slice(0, numReadings);
-
-    // Build our normalized timeSeries
-    this.timeSeries = trimmed.map((entry) => {
-      const { GMT, height, period, swellDir } = entry;
-
-      let timestampUTC;
-      try {
-        timestampUTC = new Date(GMT).toISOString();
-      } catch {
-        timestampUTC = GMT;
-      }
-
-      return {
-        timestampUTC,
-        waveHeight_m: height != null ? parseFloat(height) : null,
+    if (this.stationId === "KLIH1") {
+      result = {
+        ...result,
+        windSpeed: windSpeed != null ? parseFloat(windSpeed) : null,
+        windGust: windGust != null ? parseFloat(windGust) : null,
+        windDir: windDir || null,
+        airTemp: airTemp != null ? parseFloat(airTemp) : null,
+        waterTemp: waterTemp != null ? parseFloat(waterTemp) : null,
+      };
+    } else {
+      result = {
+        ...result,
+        waveHeight_ft: height != null ? parseFloat(height) : null,
         wavePeriod_s: period != null ? parseFloat(period) : null,
         swellDirection: swellDir || null,
       };
-    });
+    }
+
+    return result;
+  });
+  // const toHST = (utcString) => {
+  //   const date = new Date(utcString);
+
+  //   // 1) Convert to HST (UTC−10)
+  //   date.setHours(date.getHours() - 10);
+
+  //   // 2) Pull out date parts
+  //   const mm = String(date.getMonth() + 1).padStart(2, "0");
+  //   const dd = String(date.getDate()).padStart(2, "0");
+  //   let hh = date.getHours();      // 0–23
+  //   const min = String(date.getMinutes()).padStart(2, "0");
+
+  //   // 3) Build 12‑hour clock
+  //   const ampm = hh >= 12 ? "PM" : "AM";
+  //   hh = hh % 12 || 12;            // map “0” → “12”
+
+  //   // 4) Return MM/DD h:MM AM/PM
+  //   return `${mm}/${dd} ${hh}:${min} ${ampm}`;
+  // };
+
+  // Convert from UTC to HST (UTC-10) in a short format
+  const toHST = (utcString) => {
+    const date = new Date(utcString);
+    // Subtract 10 hours to get HST
+    date.toLocaleString("en-US", { timeZone: "Pacific/Honolulu" });
+
+    // Format as YYYY-MM-DD HH:MM HST (short and consistent)
+    // (Feel free to adjust formatting as you prefer)
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    const hh = String(date.getHours()).padStart(2, "0");
+    const min = String(date.getMinutes()).padStart(2, "0");
+
+    return `${mm}/${dd} ${hh}:${min}`;
+  };
+
+  // Return JSON if requested
+  if (outputFormat === "json") {
+    return JSON.stringify(this.timeSeries, null, 2);
   }
 
+  // Otherwise, return a compact, readable format
+  // (Prefix each line with this.stationId, as in your example)
+  const waveHeights = this.timeSeries
+    .map((ts) => (ts.waveHeight_ft != null ? ts.waveHeight_ft : "null"))
+    .join(" | ");
+  const wavePeriods = this.timeSeries
+    .map((ts) => (ts.wavePeriod_s != null ? ts.wavePeriod_s : "null"))
+    .join(" | ");
+  const directions = this.timeSeries
+    .map((ts) => (ts.swellDirection != null ? ts.swellDirection : "null"))
+    .join(" | ");
+  const timestamps = this.timeSeries
+    .map((ts) => toHST(ts.timestampUTC))
+    .join(" | ");
 
-  /**
-   * `getTransformedData` returns an object in the final shape 
-   * we expect for each station, i.e.:
-   * {
-   *   arrivalOrder_NW_swell: number,
-   *   relativeHoursFromPauwela: number|string,
-   *   timeSeries: Array
-   * }
-   *
-   * We'll use this data when we're ready to combine all buoys into one 
-   * final JSON structure or string prompt for an LLM.
-   * 
-   * @returns {Object} The final transformed data object for this station.
-   */
+  if (this.stationId === "KLIH1") {
+    const timestamps = this.timeSeries
+      .map((ts) => toHST(ts.timestampUTC))
+      .join(" | ");
+    const windSpeeds = this.timeSeries
+      .map((ts) => (ts.windSpeed != null ? parseFloat(ts.windSpeed) : "null"))
+      .join(" | ");
+    const windGusts = this.timeSeries
+      .map((ts) => (ts.windGust != null ? parseFloat(ts.windGust) : "null"))
+      .join(" | ");
+    const windDirs = this.timeSeries
+      .map((ts) => (ts.windDir != null ? ts.windDir : "null"))
+      .join(" | ");
+
+
+    return [
+      'timestamps: ' + timestamps,
+      `windSpeed_mph: ${windSpeeds}`,
+      `windGust_mph: ${windGusts}`,
+      `windDirection: ${windDirs}`,
+
+    ].join("\n");
+  }
+
+  return [
+    `arrivalOrder_NW_swell: ${this.arrivalOrder}`,
+    `relativeHoursFromPauwela: ${this.relativeHours}`,
+    `waveHeight_ft: ${waveHeights}`,
+    `wavePeriod_s: ${wavePeriods}`,
+    `swellDirection: ${directions}`,
+    `timestamps: ${timestamps}`,
+  ].join("\n");
+}
+
   getTransformedData() {
     return {
       arrivalOrder_NW_swell: this.arrivalOrder,
