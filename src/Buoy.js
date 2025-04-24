@@ -235,6 +235,7 @@ parseData(rawData, numReadings, outputFormat = "readable") {
       `windSpeed_mph: ${windSpeeds}`,
       `windGust_mph: ${windGusts}`,
       `windDirection: ${windDirs}`,
+      '\n',
 
     ].join("\n");
   }
@@ -246,6 +247,7 @@ parseData(rawData, numReadings, outputFormat = "readable") {
     `wavePeriod_s: ${wavePeriods}`,
     `swellDirection: ${directions}`,
     `timestamps: ${timestamps}`,
+    '\n',
   ].join("\n");
 }
 

@@ -1,11 +1,13 @@
 // index.js
-
+import { getSurfForecast } from "./fetchSurfForecast.js"; // Import the surf forecast function
 import { Buoy } from "./Buoy.js";
 import config from "./config.js"; 
 import {
   ARRIVAL_ORDERS,
   STATION_NAME_MAP,
   RELATIVE_HOURS_FROM_PAUWELA,
+  BASE_PROMPT
+
 } from "./constants.js";
 
 const { numReadings } = config; 
@@ -24,7 +26,13 @@ async function main() {
   // Alternatively, you could define them manually or from other data.
   const stationIds = Object.keys(STATION_NAME_MAP);
 
-//   feed each stationId in the array into a new Buoy instance.
+  //   feed each stationId in the array into a new Buoy instance.
+  //  this creates an object that looks like this:
+  //   [
+  //     Buoy { stationId: '51205', stationName: 'Buoy 1', ... },
+  //     Buoy { stationId: '51208', stationName: 'Buoy 2', ... },
+  //     ...
+  //   ]
   const buoys = stationIds.map((stationId) => {
     // We use the `||` operator to provide default values if a key isn't found.
     return new Buoy(
@@ -35,19 +43,24 @@ async function main() {
     );
   });
 
-    // Run all fetch-and-parse operations in parallel:a 
-    await Promise.all(
+    // fetch and parse all buoys to produce an array of readable segments
+    const readableStrings = await Promise.all(
       buoys.map(async (buoy) => {
         try {
           const rawData = await buoy.fetchData();
           const result = buoy.parseData(rawData, numReadings, "readable");
-          console.log(`\n--- ${buoy.stationName} ---\n${result}`);
+          return `\n--- ${buoy.stationName} ---\n${result}`;
         } catch (error) {
           console.error(`Error processing buoy ${buoy.stationId}:`, error);
+          return '';
         }
       })
-      );
-   
+    );
+    // join all segments into one string
+    const readableString = readableStrings.join('');
+    
+    // fetch surf forecast and include in prompt
+    const surfForecast = await getSurfForecast();
 
   const transformedData = {};
   for (const buoy of buoys) {
@@ -55,8 +68,8 @@ async function main() {
   }
 
   const llmPromptString = JSON.stringify(transformedData, null, 2);
-
-
+  const fullPrompt = `${BASE_PROMPT}\n\nCurrent Date time: ${new Date().toISOString()}\n\nSurf Forecast:\n${surfForecast}\n\nBuoy Data\n${readableString}`;
+  console.log(fullPrompt);
 
   // Example for writing to a file (Node.js):
   /*
