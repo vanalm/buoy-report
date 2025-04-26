@@ -68,7 +68,11 @@ async function main() {
   }
 
   const llmPromptString = JSON.stringify(transformedData, null, 2);
-  const fullPrompt = `${BASE_PROMPT}\n\nCurrent Date time: ${new Date().toISOString()}\n\nSurf Forecast:\n${surfForecast}\n\nBuoy Data\n${readableString}`;
+  // current time in hawaii timezone, iso format
+  const hawaiiTime = new Date().toLocaleString("en-US", {
+    timeZone: "Pacific/Honolulu",
+  });
+  const fullPrompt = `${BASE_PROMPT}\n\nCurrent Date time: ${hawaiiTime}\n\nSurf Forecast:\n${surfForecast}\n\nBuoy Data\n${readableString}`;
   console.log(fullPrompt);
 
   // Example for writing to a file (Node.js):
